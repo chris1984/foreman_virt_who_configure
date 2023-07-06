@@ -172,22 +172,29 @@ module ForemanVirtWhoConfigure
     end
 
     def create_service_user
-      User.skip_permission_check do
-        password = User.random_password
-        service_user = self.build_service_user
-        user = service_user.build_user
-        user.auth_source = AuthSourceHiddenWithAuthentication.default
-        user.password = password
-        user.login = "virt_who_reporter_#{self.id}"
-        user.organizations = [self.organization]
-        user.roles = [Role.where(:name => 'Virt-who Reporter').first]
-        user.valid? # to trigger password hashing
-        user.save!(:validate => false)
+      user_to_be_created = ForemanVirtWhoConfigure::ServiceUser.where(provider: "#{hypervisor_type}").first
+      if user_to_be_created&.provider == hypervisor_type
+        self.update_attribute :service_user_id, user_to_be_created.id
+        Rails.logger.info "There is already a user account with #{hypervisor_type}, skipping user creation"
+      else
+        User.skip_permission_check do
+          password = User.random_password
+          service_user = self.build_service_user
+          user = service_user.build_user
+          user.auth_source = AuthSourceHiddenWithAuthentication.default
+          user.password = password
+          user.login = "virt_who_reporter_#{self.id}"
+          user.organizations = [self.organization]
+          user.roles = [Role.where(:name => 'Virt-who Reporter').first]
+          user.valid? # to trigger password hashing
+          user.save!(:validate => false)
 
-        service_user.encrypted_password = password
-        service_user.save!
+          service_user.encrypted_password = password
+          service_user.provider = hypervisor_type
+          service_user.save!
 
-        self.update_attribute :service_user_id, service_user.id
+          self.update_attribute :service_user_id, service_user.id
+        end
       end
     end
 
